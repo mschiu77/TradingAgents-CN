@@ -16,6 +16,7 @@ class StockMarket(Enum):
     """股票市场枚举"""
     CHINA_A = "china_a"      # 中国A股
     HONG_KONG = "hong_kong"  # 港股
+    TAIWAN = "taiwan"        # 台股
     US = "us"                # 美股
     UNKNOWN = "unknown"      # 未知
 
@@ -46,6 +47,10 @@ class StockUtils:
         # 港股：4-5位数字.HK 或 纯4-5位数字（支持0700.HK、09988.HK、00700、9988格式）
         if re.match(r'^\d{4,5}\.HK$', ticker) or re.match(r'^\d{4,5}$', ticker):
             return StockMarket.HONG_KONG
+
+        # 台股：数字+.TW或.TWO
+        if re.search(r'\.TW(O)?$', ticker):
+            return StockMarket.TAIWAN
 
         # 美股：1-5位字母
         if re.match(r'^[A-Z]{1,5}$', ticker):
@@ -80,6 +85,19 @@ class StockUtils:
         return StockUtils.identify_stock_market(ticker) == StockMarket.HONG_KONG
     
     @staticmethod
+    def is_taiwan_stock(ticker: str) -> bool:
+        """
+        判断是否为台股
+        
+        Args:
+            ticker: 股票代码
+            
+        Returns:
+            bool: 是否为台股
+        """
+        return StockUtils.identify_stock_market(ticker) == StockMarket.TAIWAN
+    
+    @staticmethod
     def is_us_stock(ticker: str) -> bool:
         """
         判断是否为美股
@@ -109,6 +127,8 @@ class StockUtils:
             return "人民币", "¥"
         elif market == StockMarket.HONG_KONG:
             return "港币", "HK$"
+        elif market == StockMarket.TAIWAN:
+            return "新台币", "NT$"
         elif market == StockMarket.US:
             return "美元", "$"
         else:
@@ -131,6 +151,8 @@ class StockUtils:
             return "china_unified"  # 使用统一的中国股票数据源
         elif market == StockMarket.HONG_KONG:
             return "yahoo_finance"  # 港股使用Yahoo Finance
+        elif market == StockMarket.TAIWAN:
+            return "yahoo_finance"  # 台股使用Yahoo Finance
         elif market == StockMarket.US:
             return "yahoo_finance"  # 美股使用Yahoo Finance
         else:
@@ -180,6 +202,7 @@ class StockUtils:
         market_names = {
             StockMarket.CHINA_A: "中国A股",
             StockMarket.HONG_KONG: "港股",
+            StockMarket.TAIWAN: "台股",
             StockMarket.US: "美股",
             StockMarket.UNKNOWN: "未知市场"
         }
@@ -193,6 +216,7 @@ class StockUtils:
             "data_source": data_source,
             "is_china": market == StockMarket.CHINA_A,
             "is_hk": market == StockMarket.HONG_KONG,
+            "is_tw": market == StockMarket.TAIWAN,
             "is_us": market == StockMarket.US
         }
 
@@ -206,6 +230,11 @@ def is_china_stock(ticker: str) -> bool:
 def is_hk_stock(ticker: str) -> bool:
     """判断是否为港股"""
     return StockUtils.is_hk_stock(ticker)
+
+
+def is_taiwan_stock(ticker: str) -> bool:
+    """判断是否为台股"""
+    return StockUtils.is_taiwan_stock(ticker)
 
 
 def is_us_stock(ticker: str) -> bool:

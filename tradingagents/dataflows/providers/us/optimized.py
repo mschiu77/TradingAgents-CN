@@ -208,6 +208,23 @@ class OptimizedUSDataProvider:
                             logger.info(f"✅ [数据来源: API调用成功-Yahoo Finance] Yahoo Finance港股数据获取成功: {symbol}")
                         else:
                             logger.error(f"❌ [数据来源: API失败-Yahoo Finance] Yahoo Finance港股数据为空: {symbol}")
+                elif market_info.get('is_tw'):
+                    # 台股使用Yahoo Finance
+                    logger.info(f"🇹🇼 [数据来源: API调用-Yahoo Finance] 从Yahoo Finance API获取台股数据: {symbol}")
+                    self._wait_for_rate_limit()
+
+                    # 获取数据
+                    ticker = yf.Ticker(symbol.upper())
+                    data = ticker.history(start=start_date, end=end_date)
+
+                    if data.empty:
+                        error_msg = f"未找到股票 '{symbol}' 在 {start_date} 到 {end_date} 期间的数据"
+                        logger.error(f"❌ [数据来源: API失败-Yahoo Finance] {error_msg}")
+                    else:
+                        # 格式化数据
+                        formatted_data = self._format_stock_data(symbol, data, start_date, end_date)
+                        data_source = "yfinance"
+                        logger.info(f"✅ [数据来源: API调用成功-Yahoo Finance] Yahoo Finance台股数据获取成功: {symbol}")
                 else:
                     # 美股使用Yahoo Finance
                     logger.info(f"🇺🇸 [数据来源: API调用-Yahoo Finance] 从Yahoo Finance API获取美股数据: {symbol}")
@@ -253,6 +270,17 @@ class OptimizedUSDataProvider:
                           start_date: str, end_date: str) -> str:
         """格式化股票数据为字符串"""
 
+        # Determine market type for title
+        title_suffix = "美股数据分析"
+        try:
+             from tradingagents.utils.stock_utils import StockUtils
+             if StockUtils.is_taiwan_stock(symbol):
+                 title_suffix = "台股数据分析"
+             elif StockUtils.is_hk_stock(symbol):
+                 title_suffix = "港股数据分析"
+        except:
+             pass
+
         # 移除时区信息
         if data.index.tz is not None:
             data.index = data.index.tz_localize(None)
@@ -277,7 +305,7 @@ class OptimizedUSDataProvider:
         latest = data.iloc[-1]
 
         # 格式化输出
-        result = f"""# {symbol} 美股数据分析
+        result = f"""# {symbol} {title_suffix}
 
 ## 📊 基本信息
 - 股票代码: {symbol}

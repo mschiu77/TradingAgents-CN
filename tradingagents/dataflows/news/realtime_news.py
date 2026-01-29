@@ -706,6 +706,9 @@ def get_realtime_stock_news(ticker: str, curr_date: str, hours_back: int = 6) ->
         elif '.HK' in ticker:
             stock_type = "港股"
             logger.info(f"[新闻分析] 匹配到港股后缀，股票类型: {stock_type}")
+        elif any(suffix in ticker for suffix in ['.TW', '.TWO']):
+            stock_type = "台股"
+            logger.info(f"[新闻分析] 匹配到台股后缀，股票类型: {stock_type}")
         elif any(suffix in ticker for suffix in ['.US', '.N', '.O', '.NYSE', '.NASDAQ']):
             stock_type = "美股"
             logger.info(f"[新闻分析] 匹配到美股后缀，股票类型: {stock_type}")
@@ -726,6 +729,9 @@ def get_realtime_stock_news(ticker: str, curr_date: str, hours_back: int = 6) ->
             elif market_info['is_hk']:
                 stock_type = "港股"
                 logger.info(f"[新闻分析] StockUtils判断为港股")
+            elif market_info.get('is_tw'):
+                stock_type = "台股"
+                logger.info(f"[新闻分析] StockUtils判断为台股")
             elif market_info['is_us']:
                 stock_type = "美股"
                 logger.info(f"[新闻分析] StockUtils判断为美股")
@@ -917,6 +923,11 @@ def get_realtime_stock_news(ticker: str, curr_date: str, hours_back: int = 6) ->
             clean_ticker = ticker.replace('.HK', '')
             search_query = f"{clean_ticker} 港股 公司"
             logger.info(f"[新闻分析] 开始从Google获取港股 {clean_ticker} 的新闻数据，查询: {search_query}")
+        elif stock_type == "台股":
+            # 台股使用中文关键词
+            clean_ticker = ticker.replace('.TW', '').replace('.TWO', '')
+            search_query = f"{clean_ticker} 台股 新聞"
+            logger.info(f"[新闻分析] 开始从Google获取台股 {clean_ticker} 的新闻数据，查询: {search_query}")
         else:
             # 美股使用英文关键词
             search_query = f"{ticker} stock news"
