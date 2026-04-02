@@ -911,17 +911,32 @@ class DataSourceManager:
     def get_stock_dataframe(self, symbol: str, start_date: str = None, end_date: str = None, period: str = "daily") -> pd.DataFrame:
         """
         获取股票数据的 DataFrame 接口，支持多数据源和自动降级
-
+        
         Args:
             symbol: 股票代码
             start_date: 开始日期
             end_date: 结束日期
             period: 数据周期（daily/weekly/monthly），默认为daily
-
+        
         Returns:
             pd.DataFrame: 股票数据 DataFrame，列标准：open, high, low, close, vol, amount, date
         """
         logger.info(f"📊 [DataFrame接口] 获取股票数据: {symbol} ({start_date} 到 {end_date})")
+        
+        # 🔥 检测股票市场类型并路由到对应的数据源
+        from tradingagents.utils.stock_utils import StockUtils, StockMarket
+        market = StockUtils.identify_stock_market(symbol)
+        
+        # 如果不是中国A股，路由到对应市场的数据源
+        if market == StockMarket.TAIWAN:
+            logger.info(f"🇹🇼 [DataFrame接口] 检测到台股，使用TWSE数据源")
+            return self._get_taiwan_stock_dataframe(symbol, start_date, end_date)
+        elif market == StockMarket.HONG_KONG:
+            logger.info(f"🇭🇰 [DataFrame接口] 检测到港股，使用HK数据源")
+            return self._get_hk_stock_dataframe(symbol, start_date, end_date)
+        elif market == StockMarket.US:
+            logger.info(f"🇺🇸 [DataFrame接口] 检测到美股，使用US数据源")
+            return self._get_us_stock_dataframe(symbol, start_date, end_date)
 
         try:
             # 尝试当前数据源
@@ -1027,6 +1042,83 @@ class DataSourceManager:
             out['pct_change'] = out['close'].pct_change() * 100.0
 
         return out
+
+    def _get_taiwan_stock_dataframe(self, symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
+        """获取台股数据"""
+        try:
+            from app.services.data_sources.twse_adapter import TWSEAdapter
+            adapter = TWSEAdapter()
+            
+            # Remove .TW suffix if present
+            clean_code = symbol.replace('.TW', '')
+            
+            # Calculate days needed
+            if start_date and end_date:
+                from datetime import datetime
+                start = datetime.strptime(start_date, '%Y-%m-%d')
+                end = datetime.strptime(end_date, '%Y-%m-%d')
+                days = (end - start).days
+                limit = min(max(days, 30), 250)
+            else:
+                limit = 120
+            
+            kline_data = adapter.get_kline(clean_code, period="day", limit=limit)
+            
+            if kline_data:
+                df = pd.DataFrame(kline_data)
+                # Rename 'time' to 'date' for consistency
+                if 'time' in df.columns:
+                    df = df.rename(columns={'time': 'date'})
+                return self._standardize_dataframe(df)
+            return pd.DataFrame()
+        except Exception as e:
+            logger.error(f"❌ 获取台股数据失败: {e}")
+            return pd.DataFrame()
+
+    def _get_hk_stock_dataframe(self, symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
+        """获取港股数据"""
+        try:
+            from tradingagents.dataflows.providers.hk.improved_hk import get_hk_provider
+            provider = get_hk_provider()
+            df = provider.get_historical_data(symbol, start_date, end_date)
+            return self._standardize_dataframe(df) if df is not None else pd.DataFrame()
+        except Exception as e:
+            logger.warning(f"⚠️ 港股数据获取失败，尝试yfinance: {e}")
+            try:
+                import yfinance as yf
+                # Ensure .HK suffix
+                if not symbol.endswith('.HK'):
+                    symbol = f"{symbol}.HK"
+                ticker = yf.Ticker(symbol)
+                df = ticker.history(start=start_date, end=end_date)
+                if not df.empty:
+                    df = df.reset_index()
+                    df.columns = [c.lower() for c in df.columns]
+                    return self._standardize_dataframe(df)
+            except Exception as e2:
+                logger.error(f"❌ yfinance港股数据也失败: {e2}")
+            return pd.DataFrame()
+
+    def _get_us_stock_dataframe(self, symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
+        """获取美股数据"""
+        try:
+            from tradingagents.dataflows.providers.us.yfinance import get_yfinance_provider
+            provider = get_yfinance_provider()
+            df = provider.get_historical_data(symbol, start_date, end_date)
+            return self._standardize_dataframe(df) if df is not None else pd.DataFrame()
+        except Exception as e:
+            logger.warning(f"⚠️ yfinance提供者失败，尝试直接调用: {e}")
+            try:
+                import yfinance as yf
+                ticker = yf.Ticker(symbol)
+                df = ticker.history(start=start_date, end=end_date)
+                if not df.empty:
+                    df = df.reset_index()
+                    df.columns = [c.lower() for c in df.columns]
+                    return self._standardize_dataframe(df)
+            except Exception as e2:
+                logger.error(f"❌ 美股数据获取失败: {e2}")
+            return pd.DataFrame()
 
     def get_stock_data(self, symbol: str, start_date: str = None, end_date: str = None, period: str = "daily") -> str:
         """

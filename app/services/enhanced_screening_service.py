@@ -64,20 +64,25 @@ class EnhancedScreeningService:
             # 分析筛选条件
             analysis = self._analyze_conditions(conditions)
 
+            # 🔥 检查市场是否有MongoDB数据
+            has_mongodb_data = await self._check_market_has_data(market)
+            
             # 决定使用哪种筛选方式
             if (use_database_optimization and
+                has_mongodb_data and
                 analysis["can_use_database"] and
                 not analysis["needs_technical_indicators"]):
 
                 # 使用数据库优化筛选
                 result = await self._screen_with_database(
-                    conditions, limit, offset, order_by
+                    conditions, limit, offset, order_by, market
                 )
                 optimization_used = "database"
                 source = "mongodb"
 
             else:
                 # 使用传统筛选方式
+                logger.info(f"🔄 使用传统筛选 - 市场: {market}, 原因: {'无MongoDB数据' if not has_mongodb_data else '需要技术指标'}")
                 result = await self._screen_with_traditional_method(
                     conditions, market, date, adj, limit, offset, order_by
                 )
@@ -148,6 +153,68 @@ class EnhancedScreeningService:
                 "error": str(e)
             }
 
+    async def _check_market_has_data(self, market: str) -> bool:
+        """
+        检查指定市场在MongoDB中是否有数据
+        
+        Args:
+            market: 市场代码 (CN/TW/HK/US)
+            
+        Returns:
+            bool: 是否有数据
+        """
+        # 缓存结果避免重复查询
+        if not hasattr(self, '_market_data_cache'):
+            self._market_data_cache = {}
+        
+        if market in self._market_data_cache:
+            return self._market_data_cache[market]
+        
+        try:
+            db = get_mongo_db()
+            collection = db["stock_screening_view"]
+            
+            # 构建查询条件
+            if market == "CN":
+                # A股默认有数据
+                has_data = True
+            elif market == "TW":
+                count = await collection.count_documents({
+                    "$or": [
+                        {"area": "Taiwan"},
+                        {"market_info.market": "TW"},
+                        {"ts_code": {"$regex": r"\.TW$"}}
+                    ]
+                }, limit=1)
+                has_data = count > 0
+            elif market == "HK":
+                count = await collection.count_documents({
+                    "$or": [
+                        {"market_info.market": "HK"},
+                        {"ts_code": {"$regex": r"\.HK$"}}
+                    ]
+                }, limit=1)
+                has_data = count > 0
+            elif market == "US":
+                count = await collection.count_documents({
+                    "$or": [
+                        {"market_info.market": "US"},
+                        {"area": "USA"}
+                    ]
+                }, limit=1)
+                has_data = count > 0
+            else:
+                has_data = False
+            
+            self._market_data_cache[market] = has_data
+            logger.info(f"🔍 市场 {market} MongoDB数据检查: {'有数据' if has_data else '无数据'}")
+            return has_data
+            
+        except Exception as e:
+            logger.warning(f"⚠️ 检查市场数据失败: {e}")
+            # 出错时，只有CN市场假定有数据
+            return market == "CN"
+
     def _analyze_conditions(self, conditions: List[ScreeningCondition]) -> Dict[str, Any]:
         """Delegate condition analysis to utils."""
         analysis = _analyze_conditions_util(conditions)
@@ -159,16 +226,18 @@ class EnhancedScreeningService:
         conditions: List[ScreeningCondition],
         limit: int,
         offset: int,
-        order_by: Optional[List[Dict[str, str]]]
+        order_by: Optional[List[Dict[str, str]]],
+        market: str = "CN"
     ) -> Tuple[List[Dict[str, Any]], int]:
         """使用数据库优化筛选"""
-        logger.info("🚀 使用数据库优化筛选")
+        logger.info(f"🚀 使用数据库优化筛选 - 市场: {market}")
 
         return await self.db_service.screen_stocks(
             conditions=conditions,
             limit=limit,
             offset=offset,
-            order_by=order_by
+            order_by=order_by,
+            market=market
         )
 
     async def _screen_with_traditional_method(
