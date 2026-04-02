@@ -64,8 +64,8 @@ class EnhancedScreeningService:
             # 分析筛选条件
             analysis = self._analyze_conditions(conditions)
 
-            # 🔥 检查市场是否有MongoDB数据
-            has_mongodb_data = await self._check_market_has_data(market)
+            # 🔥 检查市场是否有MongoDB数据（包括必要字段）
+            has_mongodb_data = await self._check_market_has_data(market, conditions)
             
             # 决定使用哪种筛选方式
             if (use_database_optimization and
@@ -153,61 +153,94 @@ class EnhancedScreeningService:
                 "error": str(e)
             }
 
-    async def _check_market_has_data(self, market: str) -> bool:
+    async def _check_market_has_data(self, market: str, conditions: List[ScreeningCondition] = None) -> bool:
         """
-        检查指定市场在MongoDB中是否有数据
+        检查指定市场在MongoDB中是否有足够的数据支持筛选条件
         
         Args:
             market: 市场代码 (CN/TW/HK/US)
+            conditions: 筛选条件列表（用于检查是否有必要的字段）
             
         Returns:
-            bool: 是否有数据
+            bool: 是否有足够的数据
         """
+        # 缓存key包含市场和条件字段
+        cache_key = market
+        if conditions:
+            # 提取条件中使用的字段
+            fields = set()
+            for cond in conditions:
+                if hasattr(cond, 'field'):
+                    fields.add(cond.field)
+            cache_key = f"{market}:{','.join(sorted(fields))}"
+        
         # 缓存结果避免重复查询
         if not hasattr(self, '_market_data_cache'):
             self._market_data_cache = {}
         
-        if market in self._market_data_cache:
-            return self._market_data_cache[market]
+        if cache_key in self._market_data_cache:
+            return self._market_data_cache[cache_key]
         
         try:
             db = get_mongo_db()
             collection = db["stock_screening_view"]
             
-            # 构建查询条件
+            # A股默认有完整数据
             if market == "CN":
-                # A股默认有数据
                 has_data = True
-            elif market == "TW":
-                count = await collection.count_documents({
-                    "$or": [
-                        {"area": "Taiwan"},
-                        {"market_info.market": "TW"},
-                        {"ts_code": {"$regex": r"\.TW$"}}
-                    ]
-                }, limit=1)
-                has_data = count > 0
-            elif market == "HK":
-                count = await collection.count_documents({
-                    "$or": [
-                        {"market_info.market": "HK"},
-                        {"ts_code": {"$regex": r"\.HK$"}}
-                    ]
-                }, limit=1)
-                has_data = count > 0
-            elif market == "US":
-                count = await collection.count_documents({
-                    "$or": [
-                        {"market_info.market": "US"},
-                        {"area": "USA"}
-                    ]
-                }, limit=1)
-                has_data = count > 0
-            else:
-                has_data = False
+                self._market_data_cache[cache_key] = has_data
+                return has_data
             
-            self._market_data_cache[market] = has_data
-            logger.info(f"🔍 市场 {market} MongoDB数据检查: {'有数据' if has_data else '无数据'}")
+            # 对于其他市场，需要检查是否有必要的字段
+            market_queries = {
+                "TW": [
+                    {"area": "Taiwan"},
+                    {"market_info.market": "TW"},
+                    {"ts_code": {"$regex": r"\.TW$"}}
+                ],
+                "HK": [
+                    {"market_info.market": "HK"},
+                    {"ts_code": {"$regex": r"\.HK$"}}
+                ],
+                "US": [
+                    {"market_info.market": "US"},
+                    {"area": "USA"}
+                ]
+            }
+            
+            if market not in market_queries:
+                has_data = False
+            else:
+                # 检查是否有股票
+                count = await collection.count_documents({"$or": market_queries[market]}, limit=1)
+                
+                if count == 0:
+                    has_data = False
+                elif not conditions:
+                    # 没有条件，只要有股票就算有数据
+                    has_data = True
+                else:
+                    # 检查是否有条件所需的字段
+                    sample = await collection.find_one(
+                        {"$or": market_queries[market]},
+                        projection={cond.field if hasattr(cond, 'field') else cond.get('field'): 1 for cond in conditions}
+                    )
+                    
+                    if not sample:
+                        has_data = False
+                    else:
+                        # 检查所需字段是否存在且非空
+                        required_fields_available = True
+                        for cond in conditions:
+                            field = cond.field if hasattr(cond, 'field') else cond.get('field')
+                            if field and (field not in sample or sample.get(field) is None):
+                                logger.warning(f"⚠️ 市场 {market} 缺少字段: {field}")
+                                required_fields_available = False
+                                break
+                        has_data = required_fields_available
+            
+            self._market_data_cache[cache_key] = has_data
+            logger.info(f"🔍 市场 {market} MongoDB数据检查: {'有足够数据' if has_data else '数据不足或无数据'}")
             return has_data
             
         except Exception as e:

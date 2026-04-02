@@ -99,7 +99,8 @@ class DatabaseScreeningService:
         limit: int = 50,
         offset: int = 0,
         order_by: Optional[List[Dict[str, str]]] = None,
-        source: Optional[str] = None
+        source: Optional[str] = None,
+        market: str = "CN"
     ) -> Tuple[List[Dict[str, Any]], int]:
         """
         基于数据库进行股票筛选
@@ -110,11 +111,13 @@ class DatabaseScreeningService:
             offset: 偏移量
             order_by: 排序条件 [{"field": "total_mv", "direction": "desc"}]
             source: 数据源（可选），默认使用优先级最高的数据源
+            market: 市场类型 (CN/TW/HK/US)
 
         Returns:
             Tuple[List[Dict], int]: (筛选结果, 总数量)
         """
         try:
+            logger.info(f"🔍 [database_screening] 开始筛选 - 市场: {market}")
             db = get_mongo_db()
             collection = db[self.collection_name]
 
@@ -146,8 +149,39 @@ class DatabaseScreeningService:
             # 构建查询条件（现在视图已包含实时行情数据，可以直接查询所有字段）
             query = await self._build_query(conditions)
 
-            # 🔥 添加数据源筛选
-            query["source"] = source
+            # 🔥 添加数据源筛选 (不同市场使用不同的数据源)
+            if market == "TW":
+                query["source"] = "twse"
+            elif market == "HK":
+                query["source"] = "hk"  # 如果有的话
+            elif market == "US":
+                query["source"] = "yfinance"  # 如果有的话
+            else:
+                # CN market uses configured source
+                query["source"] = source
+            
+            # 🇹🇼 添加市场类型筛选
+            if market and market != "CN":
+                logger.info(f"🔍 [database_screening] 添加市场筛选: {market}")
+                if market == "TW":
+                    # 台股筛选条件
+                    query["$or"] = [
+                        {"area": "Taiwan"},
+                        {"market_info.market": "TW"},
+                        {"ts_code": {"$regex": r"\.TW$"}}
+                    ]
+                elif market == "HK":
+                    # 港股筛选条件
+                    query["$or"] = [
+                        {"market_info.market": "HK"},
+                        {"ts_code": {"$regex": r"\.HK$"}}
+                    ]
+                elif market == "US":
+                    # 美股筛选条件
+                    query["$or"] = [
+                        {"market_info.market": "US"},
+                        {"area": "USA"}
+                    ]
 
             logger.info(f"📋 数据库查询条件: {query}")
 
