@@ -65,7 +65,7 @@ class StockDataPreparer:
 
         Args:
             stock_code: 股票代码
-            market_type: 市场类型 ("A股", "港股", "美股", "auto")
+            market_type: 市场类型 ("A股", "港股", "美股", "台股", "auto")
             period_days: 历史数据时长（天），默认使用类初始化时的值
             analysis_date: 分析日期，默认为今天
 
@@ -125,8 +125,8 @@ class StockDataPreparer:
                 )
         elif market_type == "港股":
             stock_code_upper = stock_code.upper()
-            hk_format = re.match(r'^\d{4,5}\.HK$', stock_code_upper)
-            digit_format = re.match(r'^\d{4,5}$', stock_code)
+            hk_format = re.match(r'^\d{5}\.HK$', stock_code_upper)
+            digit_format = re.match(r'^\d{5}$', stock_code)
 
             if not (hk_format or digit_format):
                 return StockDataPreparationResult(
@@ -134,7 +134,7 @@ class StockDataPreparer:
                     stock_code=stock_code,
                     market_type="港股",
                     error_message="港股代码格式错误",
-                    suggestion="请输入4-5位数字.HK格式（如：0700.HK）或4-5位数字（如：0700）"
+                    suggestion="请输入5位数字.HK格式（如：00700.HK）或5位数字（如：00700）"
                 )
         elif market_type == "美股":
             if not re.match(r'^[A-Z]{1,5}$', stock_code.upper()):
@@ -144,6 +144,19 @@ class StockDataPreparer:
                     market_type="美股",
                     error_message="美股代码格式错误，应为1-5位字母",
                     suggestion="请输入1-5位字母的美股代码，如：AAPL、TSLA"
+                )
+        elif market_type == "台股":
+            stock_code_upper = stock_code.upper()
+            tw_format = re.match(r'^\d{4}\.TW$', stock_code_upper)
+            digit_format = re.match(r'^\d{4}$', stock_code)
+
+            if not (tw_format or digit_format):
+                return StockDataPreparationResult(
+                    is_valid=False,
+                    stock_code=stock_code,
+                    market_type="台股",
+                    error_message="台股代码格式错误",
+                    suggestion="请输入4位数字.TW格式（如：2330.TW）或4位数字（如：2330）"
                 )
         
         return StockDataPreparationResult(
@@ -160,8 +173,12 @@ class StockDataPreparer:
         if re.match(r'^\d{6}$', stock_code):
             return "A股"
         
-        # 港股：4-5位数字.HK 或 纯4-5位数字
-        if re.match(r'^\d{4,5}\.HK$', stock_code) or re.match(r'^\d{4,5}$', stock_code):
+        # 台股：4位数字.TW 或 纯4位数字
+        if re.match(r'^\d{4}\.TW$', stock_code) or re.match(r'^\d{4}$', stock_code):
+            return "台股"
+        
+        # 港股：5位数字.HK 或 纯5位数字
+        if re.match(r'^\d{5}\.HK$', stock_code) or re.match(r'^\d{5}$', stock_code):
             return "港股"
         
         # 美股：1-5位字母
@@ -271,13 +288,15 @@ class StockDataPreparer:
                 return self._prepare_hk_stock_data(stock_code, period_days, analysis_date)
             elif market_type == "美股":
                 return self._prepare_us_stock_data(stock_code, period_days, analysis_date)
+            elif market_type == "台股":
+                return self._prepare_tw_stock_data(stock_code, period_days, analysis_date)
             else:
                 return StockDataPreparationResult(
                     is_valid=False,
                     stock_code=stock_code,
                     market_type=market_type,
                     error_message=f"不支持的市场类型: {market_type}",
-                    suggestion="请选择支持的市场类型：A股、港股、美股"
+                    suggestion="请选择支持的市场类型：A股、港股、美股、台股"
                 )
         except Exception as e:
             logger.error(f"❌ [数据准备] 数据准备异常: {e}")
@@ -301,13 +320,15 @@ class StockDataPreparer:
                 return self._prepare_hk_stock_data(stock_code, period_days, analysis_date)
             elif market_type == "美股":
                 return self._prepare_us_stock_data(stock_code, period_days, analysis_date)
+            elif market_type == "台股":
+                return self._prepare_tw_stock_data(stock_code, period_days, analysis_date)
             else:
                 return StockDataPreparationResult(
                     is_valid=False,
                     stock_code=stock_code,
                     market_type=market_type,
                     error_message=f"不支持的市场类型: {market_type}",
-                    suggestion="请选择支持的市场类型：A股、港股、美股"
+                    suggestion="请选择支持的市场类型：A股、港股、美股、台股"
                 )
         except Exception as e:
             logger.error(f"❌ [数据准备-异步] 数据准备异常: {e}")
@@ -1217,7 +1238,75 @@ class StockDataPreparer:
                 suggestion="请检查网络连接或数据源配置"
             )
 
+    def _prepare_tw_stock_data(self, stock_code: str, period_days: int,
+                              analysis_date: str) -> StockDataPreparationResult:
+        """预获取台股数据"""
+        logger.info(f"📊 [台股数据] 开始准备{stock_code}的数据 (时长: {period_days}天)")
 
+        # 标准化台股代码格式
+        if not stock_code.upper().endswith('.TW'):
+            formatted_code = f"{stock_code}.TW"
+            logger.debug(f"🔍 [台股数据] 代码格式化: {stock_code} → {formatted_code}")
+        else:
+            formatted_code = stock_code.upper()
+
+        # 移除.TW后缀用于twstock API
+        clean_code = formatted_code.replace('.TW', '')
+
+        has_historical_data = False
+        has_basic_info = False
+        stock_name = "未知"
+
+        try:
+            # 使用TWSE adapter获取数据
+            from app.services.data_sources.twse_adapter import TWSEAdapter
+            adapter = TWSEAdapter()
+
+            # 获取K线数据验证股票存在
+            kline = adapter.get_kline(clean_code, limit=min(period_days, 30))
+
+            if kline and len(kline) > 0:
+                has_historical_data = True
+                logger.info(f"✅ [台股数据] 历史数据获取成功: {formatted_code} ({len(kline)}条记录)")
+
+                # 尝试从股票列表获取名称
+                stock_list = adapter.get_stock_list()
+                if stock_list is not None:
+                    stock_info = stock_list[stock_list['symbol'] == clean_code]
+                    if not stock_info.empty:
+                        stock_name = stock_info.iloc[0]['name']
+                        has_basic_info = True
+                        logger.info(f"✅ [台股数据] 基本信息获取成功: {formatted_code} - {stock_name}")
+
+                return StockDataPreparationResult(
+                    is_valid=True,
+                    stock_code=formatted_code,
+                    market_type="台股",
+                    stock_name=stock_name,
+                    has_historical_data=has_historical_data,
+                    has_basic_info=has_basic_info,
+                    data_period_days=period_days,
+                    cache_status=f"历史数据已缓存({len(kline) if kline else 0}条)"
+                )
+            else:
+                logger.warning(f"⚠️ [台股数据] 无法获取历史数据: {formatted_code}")
+                return StockDataPreparationResult(
+                    is_valid=False,
+                    stock_code=formatted_code,
+                    market_type="台股",
+                    error_message=f"台股代码 {formatted_code} 不存在或无数据",
+                    suggestion="请检查台股代码是否正确，格式如：2330.TW 或 2330"
+                )
+
+        except Exception as e:
+            logger.error(f"❌ [台股数据] 数据准备失败: {e}")
+            return StockDataPreparationResult(
+                is_valid=False,
+                stock_code=formatted_code,
+                market_type="台股",
+                error_message=f"数据准备失败: {str(e)}",
+                suggestion="请检查网络连接或twstock库是否正常"
+            )
 
 
 # 全局数据准备器实例

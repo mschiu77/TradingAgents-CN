@@ -5,7 +5,7 @@
 
 export interface StockValidationResult {
   valid: boolean
-  market?: 'A股' | '美股' | '港股'
+  market?: 'A股' | '美股' | '港股' | '台股'
   message?: string
   normalizedCode?: string
 }
@@ -91,21 +91,42 @@ export function validateHKStock(code: string): StockValidationResult {
   // 移除空格和特殊字符
   const cleanCode = code.trim().replace(/[^0-9]/g, '')
   
-  // 必须是1-5位数字
-  if (!/^\d{1,5}$/.test(cleanCode)) {
+  // 必须是5位数字
+  if (!/^\d{5}$/.test(cleanCode)) {
     return {
       valid: false,
-      message: '港股代码必须是1-5位数字'
+      message: '港股代码必须是5位数字'
     }
   }
-  
-  // 转换为5位格式（补齐前导0）
-  const normalizedCode = cleanCode.padStart(5, '0')
   
   return {
     valid: true,
     market: '港股',
-    normalizedCode: normalizedCode
+    normalizedCode: cleanCode
+  }
+}
+
+/**
+ * 台股代码格式验证
+ * 格式：4位数字
+ * 示例：2330（台积电）、2317（鸿海）、2454（联发科）
+ */
+export function validateTWStock(code: string): StockValidationResult {
+  // 移除空格和特殊字符
+  const cleanCode = code.trim().replace(/[^0-9]/g, '')
+  
+  // 必须是4位数字
+  if (!/^\d{4}$/.test(cleanCode)) {
+    return {
+      valid: false,
+      message: '台股代码必须是4位数字'
+    }
+  }
+  
+  return {
+    valid: true,
+    market: '台股',
+    normalizedCode: cleanCode
   }
 }
 
@@ -116,7 +137,7 @@ export function validateHKStock(code: string): StockValidationResult {
  */
 export function validateStockCode(
   code: string,
-  marketHint?: 'A股' | '美股' | '港股'
+  marketHint?: 'A股' | '美股' | '港股' | '台股'
 ): StockValidationResult {
   if (!code || !code.trim()) {
     return {
@@ -136,6 +157,8 @@ export function validateStockCode(
         return validateUSStock(trimmedCode)
       case '港股':
         return validateHKStock(trimmedCode)
+      case '台股':
+        return validateTWStock(trimmedCode)
     }
   }
   
@@ -150,14 +173,25 @@ export function validateStockCode(
       return validateAStock(cleanCode)
     }
     
-    // 1-5位数字 -> 港股
-    if (cleanCode.length >= 1 && cleanCode.length <= 5) {
+    // 5位数字 -> 港股
+    if (cleanCode.length === 5) {
       return validateHKStock(cleanCode)
+    }
+    
+    // 4位数字 -> 台股
+    if (cleanCode.length === 4) {
+      return validateTWStock(cleanCode)
+    }
+    
+    // 1-3位数字 -> 也认为是港股（补0）
+    if (cleanCode.length >= 1 && cleanCode.length <= 3) {
+      const paddedCode = cleanCode.padStart(5, '0')
+      return validateHKStock(paddedCode)
     }
     
     return {
       valid: false,
-      message: '数字代码长度不正确（A股6位，港股1-5位）'
+      message: '数字代码长度不正确（A股6位，港股5位，台股4位）'
     }
   }
   
@@ -175,14 +209,16 @@ export function validateStockCode(
 /**
  * 获取股票代码格式说明
  */
-export function getStockCodeFormatHelp(market: 'A股' | '美股' | '港股'): string {
+export function getStockCodeFormatHelp(market: 'A股' | '美股' | '港股' | '台股'): string {
   switch (market) {
     case 'A股':
       return '6位数字，如：000001（平安银行）、600519（贵州茅台）'
     case '美股':
       return '1-5个字母，如：AAPL（苹果）、TSLA（特斯拉）'
     case '港股':
-      return '1-5位数字，如：700（腾讯）、9988（阿里巴巴）'
+      return '5位数字，如：00700（腾讯）、09988（阿里巴巴）'
+    case '台股':
+      return '4位数字，如：2330（台积电）、2317（鸿海）'
     default:
       return ''
   }
@@ -191,7 +227,7 @@ export function getStockCodeFormatHelp(market: 'A股' | '美股' | '港股'): st
 /**
  * 获取股票代码示例
  */
-export function getStockCodeExamples(market: 'A股' | '美股' | '港股'): string[] {
+export function getStockCodeExamples(market: 'A股' | '美股' | '港股' | '台股'): string[] {
   switch (market) {
     case 'A股':
       return ['000001', '600519', '000858', '300750']
@@ -199,6 +235,8 @@ export function getStockCodeExamples(market: 'A股' | '美股' | '港股'): stri
       return ['AAPL', 'MSFT', 'GOOGL', 'TSLA']
     case '港股':
       return ['00700', '09988', '01810', '03690']
+    case '台股':
+      return ['2330', '2317', '2454', '2881']
     default:
       return []
   }
@@ -209,7 +247,7 @@ export function getStockCodeExamples(market: 'A股' | '美股' | '港股'): stri
  * @param code 原始代码
  * @param market 市场类型
  */
-export function formatStockCode(code: string, market: 'A股' | '美股' | '港股'): string {
+export function formatStockCode(code: string, market: 'A股' | '美股' | '港股' | '台股'): string {
   const validation = validateStockCode(code, market)
   return validation.normalizedCode || code
 }

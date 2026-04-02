@@ -80,6 +80,10 @@
                           <span>🇭🇰 港股市场</span>
                           <span style="color: #909399; font-size: 12px; margin-left: 8px;">（1-5位数字）</span>
                         </el-option>
+                        <el-option label="🇹🇼 台股市场" value="台股">
+                          <span>🇹🇼 台股市场</span>
+                          <span style="color: #909399; font-size: 12px; margin-left: 8px;">（4位数字）</span>
+                        </el-option>
                       </el-select>
                     </el-form-item>
                   </el-col>

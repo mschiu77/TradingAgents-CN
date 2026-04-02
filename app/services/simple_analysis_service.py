@@ -816,6 +816,19 @@ class SimpleAnalysisService:
         # 🔧 使用 get_symbol() 方法获取股票代码（兼容 symbol 和 stock_code 字段）
         stock_code = request.get_symbol()
 
+        # 获取市场类型（需要在标准化代码前获取）
+        market_type = request.parameters.market_type if request.parameters else "A股"
+        
+        # 🇹🇼 标准化台股代码格式：确保包含 .TW 后缀
+        if market_type == "台股" and stock_code and not stock_code.upper().endswith('.TW'):
+            stock_code = f"{stock_code}.TW"
+            logger.info(f"🇹🇼 [台股] 标准化代码: {request.get_symbol()} → {stock_code}")
+            # 更新请求对象中的代码
+            if request.symbol:
+                request.symbol = stock_code
+            if request.stock_code:
+                request.stock_code = stock_code
+
         # 添加最外层的异常捕获，确保所有异常都被记录
         try:
             logger.info(f"🎯🎯🎯 [ENTRY] execute_analysis_background 方法被调用: {task_id}")
@@ -830,12 +843,9 @@ class SimpleAnalysisService:
             logger.info(f"🚀 开始后台执行分析任务: {task_id}")
 
             # 🔍 验证股票代码是否存在
-            logger.info(f"🔍 开始验证股票代码: {stock_code}")
+            logger.info(f"🔍 开始验证股票代码: {stock_code}, 市场类型: {market_type}")
             from tradingagents.utils.stock_validator import prepare_stock_data_async
             from datetime import datetime
-
-            # 获取市场类型
-            market_type = request.parameters.market_type if request.parameters else "A股"
 
             # 获取分析日期并转换为字符串格式
             analysis_date = request.parameters.analysis_date if request.parameters else None

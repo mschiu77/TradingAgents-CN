@@ -119,6 +119,7 @@
                 <el-tag v-if="row.market === 'CN'" type="success" size="small">🇨🇳 A股</el-tag>
                 <el-tag v-else-if="row.market === 'HK'" type="warning" size="small">🇭🇰 港股</el-tag>
                 <el-tag v-else-if="row.market === 'US'" type="info" size="small">🇺🇸 美股</el-tag>
+                <el-tag v-else-if="row.market === 'TW'" type="primary" size="small">🇹🇼 台股</el-tag>
                 <el-tag v-else size="small">{{ row.market || 'CN' }}</el-tag>
               </template>
             </el-table-column>
@@ -232,16 +233,18 @@
           </el-radio-group>
         </el-form-item>
         <el-form-item label="代码">
-          <el-input v-model="order.code" placeholder="A股: 600519 | 港股: 0700 | 美股: AAPL" @input="detectMarket" />
+          <el-input v-model="order.code" placeholder="A股: 600519 | 港股: 0700 | 美股: AAPL | 台股: 2330" @input="detectMarket" />
         </el-form-item>
         <el-form-item label="市场" v-if="detectedMarket">
           <el-tag v-if="detectedMarket === 'CN'" type="success">🇨🇳 A股市场 (CNY)</el-tag>
           <el-tag v-else-if="detectedMarket === 'HK'" type="warning">🇭🇰 港股市场 (HKD)</el-tag>
           <el-tag v-else-if="detectedMarket === 'US'" type="info">🇺🇸 美股市场 (USD)</el-tag>
+          <el-tag v-else-if="detectedMarket === 'TW'" type="primary">🇹🇼 台股市场 (TWD)</el-tag>
           <div style="margin-top: 8px; font-size: 12px; color: #909399">
             <span v-if="detectedMarket === 'CN'">💡 A股T+1，今天买入明天可卖</span>
             <span v-else-if="detectedMarket === 'HK'">💡 港股T+0，买入后立即可卖</span>
             <span v-else-if="detectedMarket === 'US'">💡 美股T+0，买入后立即可卖 | 零佣金</span>
+            <span v-else-if="detectedMarket === 'TW'">💡 台股T+0，买入后立即可卖</span>
           </div>
         </el-form-item>
         <el-form-item label="数量">
@@ -330,15 +333,27 @@ function detectMarket() {
     return
   }
 
+  // 台股：4位数字且含.TW后缀，或单独4位数字（优先级高于港股）
+  if (code.endsWith('.TW')) {
+    detectedMarket.value = 'TW'
+    return
+  }
+
   // 美股：纯字母
   if (/^[A-Z]+$/.test(code)) {
     detectedMarket.value = 'US'
     return
   }
 
-  // 港股：4-5位数字或.HK后缀
-  if (/^\d{4,5}$/.test(code) || code.endsWith('.HK')) {
+  // 港股：5位数字或.HK后缀
+  if (/^\d{5}$/.test(code) || code.endsWith('.HK')) {
     detectedMarket.value = 'HK'
+    return
+  }
+
+  // 台股：4位数字（检测顺序在港股之后）
+  if (/^\d{4}$/.test(code)) {
+    detectedMarket.value = 'TW'
     return
   }
 
