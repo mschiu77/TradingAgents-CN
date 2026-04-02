@@ -27,7 +27,7 @@ class OrderByItem(BaseModel):
     direction: str = Field("desc", pattern=r"^(?i)(asc|desc)$")
 
 class ScreeningRequest(BaseModel):
-    market: str = Field("CN", description="市场：CN")
+    market: str = Field("CN", description="市场：CN/US/HK/TW")
     date: Optional[str] = Field(None, description="交易日YYYY-MM-DD，缺省为最新")
     adj: str = Field("qfq", description="复权口径：qfq/hfq/none（P0占位）")
     conditions: Dict[str, Any] = Field(default_factory=dict)

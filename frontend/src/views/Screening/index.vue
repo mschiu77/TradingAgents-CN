@@ -43,8 +43,11 @@
           <!-- 基础信息 -->
           <el-col :span="8">
             <el-form-item label="市场类型">
-              <el-select v-model="filters.market" placeholder="选择市场" disabled>
-                <el-option label="A股" value="A股" />
+              <el-select v-model="filters.market" placeholder="选择市场">
+                <el-option label="🇨🇳 A股" value="A股" />
+                <el-option label="🇺🇸 美股" value="美股" />
+                <el-option label="🇭🇰 港股" value="港股" />
+                <el-option label="🇹🇼 台股" value="台股" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -484,9 +487,18 @@ const performScreening = async () => {
     }
 
     // 明确指定：不加任何技术指标相关条件
+    
+    // 市场类型映射：前端 -> 后端
+    const marketCodeMap: Record<string, string> = {
+      'A股': 'CN',
+      '美股': 'US',
+      '港股': 'HK',
+      '台股': 'TW'
+    }
+    const marketCode = marketCodeMap[filters.market] || 'CN'
 
     const payload = {
-      market: 'CN',
+      market: marketCode,
       date: undefined,
       adj: 'qfq',
       conditions: { logic: 'AND', children },

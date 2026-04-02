@@ -11,13 +11,24 @@ from .base import DataSourceAdapter
 
 logger = logging.getLogger(__name__)
 
+# 🔥 Patch twstock URLs at module import time (before any usage)
+try:
+    import twstock.stock as _stock_module
+    if hasattr(_stock_module, 'TWSE_BASE_URL') and _stock_module.TWSE_BASE_URL.startswith('http://'):
+        _stock_module.TWSE_BASE_URL = 'https://www.twse.com.tw/'
+        logger.info("✅ TWSE: Patched TWSE_BASE_URL to HTTPS at module load")
+    if hasattr(_stock_module, 'TPEX_BASE_URL') and _stock_module.TPEX_BASE_URL.startswith('http://'):
+        _stock_module.TPEX_BASE_URL = 'https://www.tpex.org.tw/'
+        logger.info("✅ TWSE: Patched TPEX_BASE_URL to HTTPS at module load")
+except Exception as e:
+    logger.warning(f"⚠️ TWSE: Failed to patch URLs at module load: {e}")
+
 
 class TWSEAdapter(DataSourceAdapter):
     """TWSE (Taiwan Stock Exchange) data source adapter"""
 
     def __init__(self):
         super().__init__()
-        self._patch_twstock_urls()
 
     @property
     def name(self) -> str:
@@ -25,19 +36,6 @@ class TWSEAdapter(DataSourceAdapter):
 
     def _get_default_priority(self) -> int:
         return 3  # Medium priority
-
-    def _patch_twstock_urls(self):
-        """Patch twstock to use HTTPS instead of HTTP (fixes 301 redirect issue)"""
-        try:
-            import twstock.stock as stock_module
-            if hasattr(stock_module, 'TWSE_BASE_URL') and stock_module.TWSE_BASE_URL.startswith('http://'):
-                stock_module.TWSE_BASE_URL = 'https://www.twse.com.tw/'
-                logger.debug("✅ TWSE: Patched TWSE_BASE_URL to use HTTPS")
-            if hasattr(stock_module, 'TPEX_BASE_URL') and stock_module.TPEX_BASE_URL.startswith('http://'):
-                stock_module.TPEX_BASE_URL = 'https://www.tpex.org.tw/'
-                logger.debug("✅ TWSE: Patched TPEX_BASE_URL to use HTTPS")
-        except Exception as e:
-            logger.warning(f"⚠️ TWSE: Failed to patch URLs: {e}")
 
     def is_available(self) -> bool:
         """Check if twstock library is available"""
@@ -214,12 +212,22 @@ class TWSEAdapter(DataSourceAdapter):
         
         try:
             import twstock
+            import time
+            
+            # 🔥 Rate limiting: Add delay to avoid TWSE API blocking
+            if not hasattr(self, '_last_request_time'):
+                self._last_request_time = 0
+            
+            elapsed = time.time() - self._last_request_time
+            if elapsed < 0.2:  # Minimum 200ms between requests
+                time.sleep(0.2 - elapsed)
             
             # Remove .TW suffix if present
             code = code.replace('.TW', '')
             
             logger.info(f"🇹🇼 TWSE: Fetching K-line for {code}, period={period}, limit={limit}")
             
+            self._last_request_time = time.time()
             stock = twstock.Stock(code)
             
             # Calculate date range

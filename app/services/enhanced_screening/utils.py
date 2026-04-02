@@ -54,23 +54,33 @@ def analyze_conditions(conditions: List[ScreeningCondition]) -> Dict[str, Any]:
 
 
 def convert_conditions_to_traditional_format(conditions: List[ScreeningCondition]) -> Dict[str, Any]:
-    traditional_conditions: Dict[str, Any] = {}
-
+    """
+    Convert ScreeningCondition objects to traditional DSL format
+    
+    Expected DSL format:
+    {
+        "logic": "AND",
+        "children": [
+            {"field": "amount", "op": "between", "value": [min, max]},
+            ...
+        ]
+    }
+    """
+    if not conditions:
+        return {}
+    
+    children = []
     for condition in conditions:
-        field = condition.field
-        operator = condition.operator
-        value = condition.value
-
-        if operator == "between" and isinstance(value, list) and len(value) == 2:
-            traditional_conditions[field] = {"min": value[0], "max": value[1]}
-        elif operator in [">", "<", ">=", "<="]:
-            traditional_conditions[field] = {operator: value}
-        elif operator == "==":
-            traditional_conditions[field] = value
-        elif operator in ["in", "not_in"]:
-            traditional_conditions[field] = {operator: value}
-        else:
-            traditional_conditions[field] = {operator: value}
-
-    return traditional_conditions
+        node = {
+            "field": condition.field,
+            "op": condition.operator,
+            "value": condition.value
+        }
+        children.append(node)
+    
+    # Return DSL structure
+    return {
+        "logic": "AND",
+        "children": children
+    }
 

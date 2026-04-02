@@ -75,7 +75,9 @@ class ScreeningService:
 
     # --- 公共入口 ---
     def run(self, conditions: Dict[str, Any], params: ScreeningParams) -> Dict[str, Any]:
-        symbols = self._get_universe()
+        logger.info(f"🔍 [Screening] 开始筛选 - 市场: {params.market}")
+        symbols = self._get_universe(params.market)
+        logger.info(f"📊 [Screening] 获取到 {len(symbols)} 只{params.market}股票")
         # 为控制时长，先限制样本规模（后续用批量/缓存优化）
         symbols = symbols[:120]
 
@@ -87,24 +89,38 @@ class ScreeningService:
         results: List[Dict[str, Any]] = []
 
         # 解析条件中涉及的字段，决定是否需要技术指标/行情
+        logger.info(f"🔍 [Screening] 原始条件: {conditions}")
         needed_fields = self._collect_fields_from_conditions(conditions)
         order_fields = {o.get("field") for o in (params.order_by or []) if o.get("field")}
         all_needed = set(needed_fields) | set(order_fields)
         need_tech = any(f in TECH_FIELDS for f in all_needed)
         need_base = any(f in BASE_FIELDS for f in all_needed) or need_tech
         need_fund = any(f in FUND_FIELDS for f in all_needed)
+        
+        logger.info(f"🔍 [Screening] 字段分析 - needed_fields: {needed_fields}, need_base: {need_base}, need_tech: {need_tech}, need_fund: {need_fund}")
 
         for code in symbols:
             try:
                 dfc = None
                 last = None
 
+                # 🔥 为非中国市场添加市场后缀以便正确识别
+                query_code = code
+                if params.market == "TW" and not code.endswith('.TW'):
+                    query_code = f"{code}.TW"
+                elif params.market == "HK" and not code.endswith('.HK'):
+                    query_code = f"{code}.HK"
+                # US stocks usually don't need suffix
+
                 # 如需要基础行情/技术指标才取K线
                 if need_base:
+                    logger.info(f"🔍 [Screening] 获取 {query_code} 的K线数据...")
                     manager = get_data_source_manager()
-                    df = manager.get_stock_dataframe(code, start_s, end_s)
+                    df = manager.get_stock_dataframe(query_code, start_s, end_s)
                     if df is None or df.empty:
+                        logger.warning(f"⚠️ [Screening] {query_code} 无数据，跳过")
                         continue
+                    logger.info(f"✅ [Screening] {query_code} 获取到 {len(df)} 条数据")
                     # 统一列为小写
                     dfu = df.rename(columns={
                         "Open": "open", "High": "high", "Low": "low", "Close": "close",
@@ -203,36 +219,89 @@ class ScreeningService:
         """Delegate numeric coercion to utils."""
         return _safe_float_util(v)
 
-    def _get_universe(self) -> List[str]:
-        """获取A股代码集合：从 MongoDB stock_basic_info 集合获取所有A股股票代码"""
+    def _get_universe(self, market: str = "CN") -> List[str]:
+        """获取指定市场的股票代码集合：从 MongoDB stock_basic_info 集合获取"""
+        logger.info(f"🔍 [_get_universe] 查询市场: {market}")
         try:
-            from app.core.database import get_mongo_db
-
-            db = get_mongo_db()
+            # Use synchronous MongoDB client to avoid async issues
+            from pymongo import MongoClient
+            import os
+            
+            mongo_uri = os.getenv("MONGODB_CONNECTION_STRING", "mongodb://admin:tradingagents123@localhost:27017/")
+            client = MongoClient(mongo_uri)
+            db = client.tradingagents
             collection = db.stock_basic_info
 
-            # 查询所有A股股票代码（兼容不同的数据结构）
-            cursor = collection.find(
-                {
+            # 根据市场类型构建查询条件
+            if market == "CN":
+                # A股股票代码
+                query = {
                     "$or": [
-                        {"market_info.market": "CN"},  # 新数据结构
-                        {"category": "stock_cn"},      # 旧数据结构
-                        {"market": {"$in": ["主板", "创业板", "科创板", "北交所"]}}  # 按市场类型
+                        {"market_info.market": "CN"},
+                        {"category": "stock_cn"},
+                        {"market": {"$in": ["主板", "创业板", "科创板", "北交所"]}}
                     ]
-                },
-                {"code": 1, "_id": 0}
-            )
+                }
+                market_name = "A股"
+            elif market == "TW":
+                # 台股股票代码
+                query = {
+                    "$or": [
+                        {"market_info.market": "TW"},
+                        {"ts_code": {"$regex": r"\.TW$"}},
+                        {"area": "Taiwan"}
+                    ]
+                }
+                market_name = "台股"
+            elif market == "HK":
+                # 港股股票代码
+                query = {
+                    "$or": [
+                        {"market_info.market": "HK"},
+                        {"ts_code": {"$regex": r"\.HK$"}}
+                    ]
+                }
+                market_name = "港股"
+            elif market == "US":
+                # 美股股票代码
+                query = {
+                    "$or": [
+                        {"market_info.market": "US"},
+                        {"area": "USA"}
+                    ]
+                }
+                market_name = "美股"
+            else:
+                logger.warning(f"⚠️ 不支持的市场类型: {market}，使用A股")
+                return self._get_universe("CN")
+            
+            logger.info(f"🔍 [_get_universe] 查询条件: {query}")
+            cursor = collection.find(query, {"code": 1, "symbol": 1, "_id": 0})
 
             # 同步获取所有股票代码
-            codes = [doc.get("code") for doc in cursor if doc.get("code")]
+            codes = []
+            for doc in cursor:
+                code = doc.get("code") or doc.get("symbol")
+                if code:
+                    codes.append(code)
+
+            # Close connection
+            client.close()
 
             if codes:
-                logger.info(f"📊 从 MongoDB 获取到 {len(codes)} 只A股股票")
+                logger.info(f"📊 从 MongoDB 获取到 {len(codes)} 只{market_name}股票")
                 return codes
             else:
-                # 如果数据库为空，返回常见股票代码作为兜底
-                logger.warning("⚠️ MongoDB 中未找到股票数据，使用兜底股票列表")
-                return ["000001", "000002", "000858", "600519", "600036", "601318", "300750"]
+                # 如果数据库为空，返回默认股票代码
+                logger.warning(f"⚠️ MongoDB 中未找到{market_name}数据")
+                if market == "TW":
+                    return ["2330", "2317", "2454"]  # 台积电、鸿海、联发科
+                elif market == "HK":
+                    return ["00700", "09988"]  # 腾讯、阿里
+                elif market == "US":
+                    return ["AAPL", "TSLA"]
+                else:
+                    return ["000001", "000002", "600519"]  # A股
 
         except Exception as e:
             logger.error(f"❌ 从 MongoDB 获取股票列表失败: {e}")
