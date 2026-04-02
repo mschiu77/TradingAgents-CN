@@ -38,10 +38,15 @@ def _detect_market_and_code(code: str) -> Tuple[str, str]:
     Returns:
         (market, normalized_code): 市场类型和标准化后的代码
             - CN: A股（6位数字）
-            - HK: 港股（4-5位数字或带.HK后缀）
+            - TW: 台股（4位数字或带.TW后缀，且不以0开头）
+            - HK: 港股（4-5位数字且以0开头，或带.HK后缀）
             - US: 美股（字母代码）
     """
     code = code.strip().upper()
+
+    # 台股：带 .TW 后缀
+    if code.endswith('.TW'):
+        return ('TW', code[:-3])
 
     # 港股：带.HK后缀
     if code.endswith('.HK'):
@@ -51,13 +56,22 @@ def _detect_market_and_code(code: str) -> Tuple[str, str]:
     if re.match(r'^[A-Z]+$', code):
         return ('US', code)
 
-    # 港股：4-5位数字
-    if re.match(r'^\d{4,5}$', code):
-        return ('HK', code.zfill(5))  # 补齐到5位
-
     # A股：6位数字
     if re.match(r'^\d{6}$', code):
         return ('CN', code)
+
+    # 港股：5位数字
+    if re.match(r'^\d{5}$', code):
+        return ('HK', code.zfill(5))
+
+    # 4位数字：根据首位判断
+    if re.match(r'^\d{4}$', code):
+        # 港股：以0开头的4位数字 (如0700腾讯)
+        if code.startswith('0'):
+            return ('HK', code.zfill(5))
+        # 台股：不以0开头的4位数字 (如2330台积电)
+        else:
+            return ('TW', code)
 
     # 默认当作A股处理
     return ('CN', _zfill_code(code))
@@ -89,6 +103,78 @@ async def get_quote(
     """
     # 检测市场类型
     market, normalized_code = _detect_market_and_code(code)
+
+    # 台股：使用TWSE数据
+    if market == 'TW':
+        db = get_mongo_db()
+        try:
+            # 1. 尝试从 market_quotes 获取
+            q = await db["market_quotes"].find_one(
+                {"code": normalized_code, "source": "twse"},
+                {"_id": 0}
+            )
+            
+            if q:
+                # 从stock_basic_info获取名称
+                stock_info = await db["stock_basic_info"].find_one(
+                    {"code": normalized_code},
+                    {"_id": 0, "name": 1}
+                )
+                name = stock_info.get("name") if stock_info else None
+                
+                return ok(data={
+                    "code": normalized_code,
+                    "name": name,
+                    "market": "TW",
+                    "price": float(q.get("close", 0)),
+                    "change_percent": float(q.get("pct_chg", 0)),
+                    "amount": float(q.get("amount", 0)) if q.get("amount") else None,
+                    "prev_close": float(q.get("pre_close", 0)) if q.get("pre_close") else None,
+                    "turnover_rate": None,
+                    "amplitude": None,
+                    "trade_date": q.get("trade_date"),
+                    "updated_at": q.get("updated_at")
+                })
+            
+            # 2. 如果没有缓存，尝试从TWSE API实时获取
+            from app.services.data_sources.twse_adapter import TWSEAdapter
+            adapter = TWSEAdapter()
+            kline = adapter.get_kline(normalized_code, limit=1)
+            
+            if kline and len(kline) > 0:
+                latest = kline[-1]
+                stock_info = await db["stock_basic_info"].find_one(
+                    {"code": normalized_code},
+                    {"_id": 0, "name": 1}
+                )
+                name = stock_info.get("name") if stock_info else None
+                
+                return ok(data={
+                    "code": normalized_code,
+                    "name": name,
+                    "market": "TW",
+                    "price": float(latest.get("close", 0)),
+                    "change_percent": None,
+                    "amount": float(latest.get("volume", 0)) if latest.get("volume") else None,
+                    "prev_close": None,
+                    "turnover_rate": None,
+                    "amplitude": None,
+                    "trade_date": latest.get("date"),
+                    "updated_at": None
+                })
+            
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"台股 {normalized_code} 暂无行情数据"
+            )
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"获取台股{code}行情失败: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"获取行情失败: {str(e)}"
+            )
 
     # 港股和美股：使用新服务
     if market in ['HK', 'US']:

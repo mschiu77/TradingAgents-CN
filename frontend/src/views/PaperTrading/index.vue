@@ -58,6 +58,20 @@
                 </el-descriptions>
               </el-tab-pane>
 
+              <!-- 台股账户 -->
+              <el-tab-pane label="🇹🇼 台股" name="TW">
+                <el-descriptions :column="1" border>
+                  <el-descriptions-item label="可用资金">NT${{ fmtAmount(account.cash?.TWD || 0) }}</el-descriptions-item>
+                  <el-descriptions-item label="持仓市值">NT${{ fmtAmount(account.positions_value?.TWD || 0) }}</el-descriptions-item>
+                  <el-descriptions-item label="总资产">NT${{ fmtAmount(account.equity?.TWD || 0) }}</el-descriptions-item>
+                  <el-descriptions-item label="已实现盈亏">
+                    <span :style="{ color: (account.realized_pnl?.TWD || 0) >= 0 ? '#67C23A' : '#F56C6C' }">
+                      NT${{ fmtAmount(account.realized_pnl?.TWD || 0) }}
+                    </span>
+                  </el-descriptions-item>
+                </el-descriptions>
+              </el-tab-pane>
+
               <!-- 港股账户 -->
               <el-tab-pane label="🇭🇰 港股" name="HK">
                 <el-descriptions :column="1" border>

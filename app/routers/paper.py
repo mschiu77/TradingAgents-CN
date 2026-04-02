@@ -16,6 +16,7 @@ logger = logging.getLogger("webapi")
 # 每个市场的初始资金配置
 INITIAL_CASH_BY_MARKET = {
     "CNY": 1_000_000.0,   # A股：100万人民币
+    "TWD": 3_000_000.0,   # 台股：300万新台币 (约100万人民币)
     "HKD": 1_000_000.0,   # 港股：100万港币
     "USD": 100_000.0      # 美股：10万美元
 }
@@ -25,7 +26,7 @@ class PlaceOrderRequest(BaseModel):
     code: str = Field(..., description="股票代码（支持A股/港股/美股）")
     side: Literal["buy", "sell"]
     quantity: int = Field(..., gt=0)
-    market: Optional[str] = Field(None, description="市场类型 (CN/HK/US)，不传则自动识别")
+    market: Optional[str] = Field(None, description="市场类型 (CN/TW/HK/US)，不传则自动识别")
     # 可选：关联的分析ID，便于从分析页面一键下单后追踪
     analysis_id: Optional[str] = None
 
@@ -37,10 +38,15 @@ def _detect_market_and_code(code: str) -> Tuple[str, str]:
     Returns:
         (market, normalized_code): 市场类型和标准化后的代码
             - CN: A股（6位数字）
-            - HK: 港股（4-5位数字或带.HK后缀）
+            - TW: 台股（4位数字或带.TW后缀，且不以0开头）
+            - HK: 港股（4-5位数字且以0开头，或带.HK后缀）
             - US: 美股（字母代码）
     """
     code = code.strip().upper()
+
+    # 台股：带 .TW 后缀
+    if code.endswith('.TW'):
+        return ('TW', code[:-3])
 
     # 港股：带 .HK 后缀
     if code.endswith('.HK'):
@@ -50,13 +56,22 @@ def _detect_market_and_code(code: str) -> Tuple[str, str]:
     if re.match(r'^[A-Z]+$', code):
         return ('US', code)
 
-    # 港股：4-5位数字
-    if re.match(r'^\d{4,5}$', code):
-        return ('HK', code.zfill(5))
-
     # A股：6位数字
     if re.match(r'^\d{6}$', code):
         return ('CN', code)
+
+    # 港股：5位数字
+    if re.match(r'^\d{5}$', code):
+        return ('HK', code.zfill(5))
+
+    # 4位数字：根据首位判断
+    if re.match(r'^\d{4}$', code):
+        # 港股：以0开头的4位数字 (如0700腾讯)
+        if code.startswith('0'):
+            return ('HK', code.zfill(5))
+        # 台股：不以0开头的4位数字 (如2330台积电)
+        else:
+            return ('TW', code)
 
     # 默认当作A股，补齐6位
     return ('CN', code.zfill(6))
@@ -73,12 +88,14 @@ async def _get_or_create_account(user_id: str) -> Dict[str, Any]:
             # 多货币现金账户
             "cash": {
                 "CNY": INITIAL_CASH_BY_MARKET["CNY"],
+                "TWD": INITIAL_CASH_BY_MARKET["TWD"],
                 "HKD": INITIAL_CASH_BY_MARKET["HKD"],
                 "USD": INITIAL_CASH_BY_MARKET["USD"]
             },
             # 多货币已实现盈亏
             "realized_pnl": {
                 "CNY": 0.0,
+                "TWD": 0.0,
                 "HKD": 0.0,
                 "USD": 0.0
             },
@@ -92,24 +109,53 @@ async def _get_or_create_account(user_id: str) -> Dict[str, Any]:
         }
         await db["paper_accounts"].insert_one(acc)
     else:
-        # 兼容旧账户结构：如果 cash 或 realized_pnl 仍为标量，迁移为多货币对象
+        # 兼容旧账户结构：迁移为多货币支持（包括TWD）
         updates: Dict[str, Any] = {}
+        needs_migration = False
+        
         try:
             cash_val = acc.get("cash")
+            
+            # 情况1: cash 是标量，需要完全迁移
             if not isinstance(cash_val, dict):
                 base_cash = float(cash_val or 0.0)
-                updates["cash"] = {"CNY": base_cash, "HKD": 0.0, "USD": 0.0}
+                updates["cash"] = {
+                    "CNY": base_cash, 
+                    "TWD": INITIAL_CASH_BY_MARKET["TWD"], 
+                    "HKD": 0.0, 
+                    "USD": 0.0
+                }
+                needs_migration = True
+            # 情况2: cash 是字典，但缺少 TWD
+            elif isinstance(cash_val, dict) and "TWD" not in cash_val:
+                cash_val["TWD"] = INITIAL_CASH_BY_MARKET["TWD"]
+                updates["cash"] = cash_val
+                needs_migration = True
 
             pnl_val = acc.get("realized_pnl")
+            
+            # 情况1: pnl 是标量，需要完全迁移
             if not isinstance(pnl_val, dict):
                 base_pnl = float(pnl_val or 0.0)
-                updates["realized_pnl"] = {"CNY": base_pnl, "HKD": 0.0, "USD": 0.0}
+                updates["realized_pnl"] = {
+                    "CNY": base_pnl, 
+                    "TWD": 0.0, 
+                    "HKD": 0.0, 
+                    "USD": 0.0
+                }
+                needs_migration = True
+            # 情况2: pnl 是字典，但缺少 TWD
+            elif isinstance(pnl_val, dict) and "TWD" not in pnl_val:
+                pnl_val["TWD"] = 0.0
+                updates["realized_pnl"] = pnl_val
+                needs_migration = True
 
-            if updates:
+            if needs_migration:
                 updates["updated_at"] = datetime.utcnow().isoformat()
                 await db["paper_accounts"].update_one({"user_id": user_id}, {"$set": updates})
                 # 重新读取迁移后的账户
                 acc = await db["paper_accounts"].find_one({"user_id": user_id})
+                logger.info(f"✅ Paper account migrated to include TWD: {user_id}")
         except Exception as e:
             logger.error(f"❌ 账户结构迁移失败 user_id={user_id}: {e}")
     return acc
@@ -187,7 +233,7 @@ async def _get_available_quantity(user_id: str, code: str, market: str) -> int:
             today_buy_qty = today_buy[0]["total"] if today_buy else 0
             return max(0, total_qty - today_buy_qty)
 
-    # 港股/美股T+0：全部可用
+    # 台股/港股/美股T+0：全部可用
     return total_qty
 
 
@@ -197,7 +243,7 @@ async def _get_last_price(code: str, market: str) -> Optional[float]:
 
     Args:
         code: 股票代码
-        market: 市场类型 (CN/HK/US)
+        market: 市场类型 (CN/TW/HK/US)
 
     Returns:
         最新价格，如果获取失败返回 None
@@ -235,6 +281,38 @@ async def _get_last_price(code: str, market: str) -> Optional[float]:
                 logger.warning(f"⚠️ stock_basic_info 价格转换失败 {code}: {e}")
 
         logger.error(f"❌ 无法从数据库获取A股价格: {code}")
+        return None
+
+    # 台股：从MongoDB或TWSE API获取
+    elif market == "TW":
+        # 1. 尝试从 market_quotes 获取 (如果已同步)
+        q = await db["market_quotes"].find_one(
+            {"code": code, "source": "twse"},
+            {"_id": 0, "close": 1}
+        )
+        if q and q.get("close") is not None:
+            try:
+                price = float(q["close"])
+                if price > 0:
+                    logger.debug(f"✅ 从 market_quotes 获取台股价格: {code} = {price}")
+                    return price
+            except Exception as e:
+                logger.warning(f"⚠️ 台股价格转换失败 {code}: {e}")
+
+        # 2. 回退到TWSE API实时获取
+        try:
+            from app.services.data_sources.twse_adapter import TWSEAdapter
+            adapter = TWSEAdapter()
+            kline = adapter.get_kline(code, limit=1)
+            if kline and len(kline) > 0:
+                price = float(kline[-1]['close'])
+                if price > 0:
+                    logger.debug(f"✅ 从 TWSE API 获取台股价格: {code} = {price}")
+                    return price
+        except Exception as e:
+            logger.error(f"❌ 从TWSE API获取台股价格失败 {code}: {e}")
+
+        logger.error(f"❌ 无法获取台股价格: {code}")
         return None
 
     # 港股/美股：使用 ForeignStockService
@@ -278,6 +356,7 @@ async def get_account(current_user: dict = Depends(get_current_user)):
 
     positions_value_by_currency = {
         "CNY": 0.0,
+        "TWD": 0.0,
         "HKD": 0.0,
         "USD": 0.0
     }
@@ -296,8 +375,25 @@ async def get_account(current_user: dict = Depends(get_current_user)):
         mkt_value = round((last or 0.0) * qty, 2)
         positions_value_by_currency[currency] += mkt_value
 
+        # 获取股票名称
+        stock_name = None
+        try:
+            # 尝试从 stock_basic_info 获取名称
+            stock_info = await db["stock_basic_info"].find_one({
+                "$or": [
+                    {"code": code},
+                    {"ts_code": f"{code}.TW"} if market == "TW" else {"ts_code": code},
+                    {"symbol": code}
+                ]
+            })
+            if stock_info:
+                stock_name = stock_info.get("name")
+        except Exception as e:
+            logger.debug(f"Failed to fetch stock name for {code}: {e}")
+
         detailed_positions.append({
             "code": code,
+            "name": stock_name,
             "market": market,
             "currency": currency,
             "quantity": qty,
@@ -314,24 +410,27 @@ async def get_account(current_user: dict = Depends(get_current_user)):
 
     # 兼容旧格式（单一现金）
     if not isinstance(cash, dict):
-        cash = {"CNY": float(cash), "HKD": 0.0, "USD": 0.0}
+        cash = {"CNY": float(cash), "TWD": 0.0, "HKD": 0.0, "USD": 0.0}
     if not isinstance(realized_pnl, dict):
-        realized_pnl = {"CNY": float(realized_pnl), "HKD": 0.0, "USD": 0.0}
+        realized_pnl = {"CNY": float(realized_pnl), "TWD": 0.0, "HKD": 0.0, "USD": 0.0}
 
     summary = {
         "cash": {
             "CNY": round(float(cash.get("CNY", 0.0)), 2),
+            "TWD": round(float(cash.get("TWD", 0.0)), 2),
             "HKD": round(float(cash.get("HKD", 0.0)), 2),
             "USD": round(float(cash.get("USD", 0.0)), 2)
         },
         "realized_pnl": {
             "CNY": round(float(realized_pnl.get("CNY", 0.0)), 2),
+            "TWD": round(float(realized_pnl.get("TWD", 0.0)), 2),
             "HKD": round(float(realized_pnl.get("HKD", 0.0)), 2),
             "USD": round(float(realized_pnl.get("USD", 0.0)), 2)
         },
         "positions_value": positions_value_by_currency,
         "equity": {
             "CNY": round(float(cash.get("CNY", 0.0)) + positions_value_by_currency["CNY"], 2),
+            "TWD": round(float(cash.get("TWD", 0.0)) + positions_value_by_currency["TWD"], 2),
             "HKD": round(float(cash.get("HKD", 0.0)) + positions_value_by_currency["HKD"], 2),
             "USD": round(float(cash.get("USD", 0.0)) + positions_value_by_currency["USD"], 2)
         },
@@ -360,6 +459,7 @@ async def place_order(payload: PlaceOrderRequest, current_user: dict = Depends(g
     # 2. 确定货币
     currency_map = {
         "CN": "CNY",
+        "TW": "TWD",
         "HK": "HKD",
         "US": "USD"
     }
@@ -421,7 +521,7 @@ async def place_order(payload: PlaceOrderRequest, current_user: dict = Depends(g
                 "market": market,
                 "currency": currency,
                 "quantity": qty,
-                "available_qty": qty if market != "CN" else 0,  # A股T+1，今天买入不可用
+                "available_qty": qty if market not in ["CN"] else 0,  # A股T+1，今天买入不可用；台股/港股/美股T+0
                 "frozen_qty": 0,
                 "avg_cost": price,
                 "updated_at": now_iso

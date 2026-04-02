@@ -161,49 +161,20 @@ class TWSEAdapter(DataSourceAdapter):
             return None
 
     def get_realtime_quotes(self) -> Optional[Dict[str, Dict[str, Optional[float]]]]:
-        """Get real-time quotes for all stocks"""
-        if not self.is_available():
-            return None
+        """
+        Get real-time quotes for Taiwan stocks
         
-        try:
-            import twstock
-            
-            logger.info("🇹🇼 TWSE: Fetching real-time quotes...")
-            
-            codes = twstock.codes
-            quotes = {}
-            
-            for code, info in codes.items():
-                if info.type == '股票':
-                    try:
-                        stock = twstock.Stock(code)
-                        # Get latest price
-                        price = stock.price
-                        
-                        if price and len(price) > 0:
-                            latest_price = price[-1]
-                            prev_price = price[-2] if len(price) > 1 else latest_price
-                            
-                            pct_chg = ((latest_price - prev_price) / prev_price * 100) if prev_price > 0 else 0
-                            
-                            quotes[code] = {
-                                'close': latest_price,
-                                'pct_chg': pct_chg,
-                                'amount': None  # Volume data not readily available in realtime
-                            }
-                    except Exception as e:
-                        logger.debug(f"TWSE: Failed to fetch quote for {code}: {e}")
-                        continue
-            
-            if not quotes:
-                return None
-            
-            logger.info(f"✅ TWSE: Fetched quotes for {len(quotes)} stocks")
-            return quotes
-            
-        except Exception as e:
-            logger.error(f"❌ TWSE: Failed to fetch realtime quotes: {e}")
-            return None
+        ⚠️ WARNING: This method is DISABLED for full market fetch due to:
+        - 1,925 API calls would take 8-16 minutes
+        - High risk of TWSE API rate limiting/blocking
+        - Causes application startup to hang
+        
+        For TWSE, use get_kline() for individual stocks instead.
+        For bulk data, run sync scripts: scripts/sync_tw_market_data.py
+        """
+        logger.warning("🇹🇼 TWSE: get_realtime_quotes() is disabled (use sync scripts instead)")
+        logger.info("💡 TWSE: Run 'python3 scripts/sync_tw_market_data.py' to populate data")
+        return None  # Disabled to prevent startup hang
 
     def get_kline(self, code: str, period: str = "day", limit: int = 120, adj: Optional[str] = None):
         """Get K-line data for a stock"""
