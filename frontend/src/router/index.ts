@@ -382,6 +382,30 @@ const routes: RouteRecordRaw[] = [
     ]
   },
 
+  // 策略研究
+  {
+    path: '/strategy',
+    name: 'StrategyResearch',
+    component: () => import('@/layouts/BasicLayout.vue'),
+    meta: {
+      title: '策略研究',
+      icon: 'DataAnalysis',
+      requiresAuth: true,
+      transition: 'slide-up'
+    },
+    children: [
+      {
+        path: '',
+        name: 'StrategyResearchHome',
+        component: () => import('@/views/StrategyResearch/index.vue'),
+        meta: {
+          title: '策略研究',
+          requiresAuth: true
+        }
+      }
+    ]
+  },
+
   {
     path: '/:pathMatch(.*)*',
     name: 'NotFound',
