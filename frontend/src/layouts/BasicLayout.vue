@@ -1,5 +1,5 @@
 <template>
-  <div class="basic-layout">
+  <div class="basic-layout" :class="{ 'smartphone-layout': appStore.layoutMode === 'smartphone' }">
     <!-- 侧边栏 -->
     <aside
       class="sidebar"
@@ -274,6 +274,52 @@ watch(() => route.fullPath, () => {
 
   .header {
     padding: 0 16px;
+  }
+}
+
+// 手机布局模式
+.smartphone-layout {
+  .sidebar {
+    transform: translateX(-100%);
+    
+    &:not(.collapsed) {
+      transform: translateX(0);
+    }
+  }
+
+  .main-container {
+    margin-left: 0 !important;
+  }
+
+  .main-content {
+    padding: 12px;
+
+    .content-wrapper {
+      max-width: 100%;
+      padding: 0;
+    }
+  }
+
+  .header {
+    padding: 0 12px;
+    height: 50px;
+
+    .header-left {
+      gap: 8px;
+
+      .sidebar-toggle {
+        padding: 6px;
+      }
+    }
+
+    .header-right {
+      gap: 4px;
+    }
+  }
+
+  .footer {
+    height: 50px;
+    font-size: 12px;
   }
 }
 

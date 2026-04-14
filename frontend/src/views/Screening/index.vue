@@ -853,4 +853,136 @@ onMounted(() => {
     color: #67c23a;
   }
 }
+
+// ==================== 移动端响应式 ====================
+@media (max-width: 768px) {
+  .stock-screening {
+    .page-header {
+      .page-title {
+        font-size: 20px;
+      }
+      
+      .page-description {
+        font-size: 13px;
+      }
+    }
+
+    .filter-panel {
+      margin-bottom: 16px;
+      
+      .card-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+        
+        .header-actions {
+          width: 100%;
+          justify-content: flex-end;
+        }
+      }
+
+      .filter-form {
+        // 表单项占满一行
+        :deep(.el-row) {
+          .el-col {
+            max-width: 100%;
+            flex: 0 0 100%;
+          }
+        }
+        
+        // 调整表单标签宽度
+        :deep(.el-form-item) {
+          margin-bottom: 16px;
+          
+          .el-form-item__label {
+            width: 100px !important;
+            font-size: 14px;
+          }
+          
+          .el-form-item__content {
+            margin-left: 100px !important;
+          }
+        }
+        
+        // 数字范围输入框
+        :deep(.el-input-number) {
+          width: 42% !important;
+        }
+
+        .filter-actions {
+          flex-direction: column;
+          
+          .el-button {
+            width: 100%;
+          }
+        }
+      }
+    }
+
+    .results-panel {
+      // 表格滚动容器
+      :deep(.el-table) {
+        font-size: 12px;
+        
+        .el-table__header {
+          th {
+            padding: 8px 4px;
+            font-size: 11px;
+          }
+        }
+        
+        .el-table__body {
+          td {
+            padding: 10px 4px;
+            font-size: 12px;
+          }
+        }
+        
+        // 操作列按钮
+        .cell {
+          .el-button {
+            padding: 6px 10px;
+            font-size: 12px;
+          }
+        }
+      }
+
+      .pagination-wrapper {
+        :deep(.el-pagination) {
+          .el-pagination__sizes,
+          .el-pagination__jump {
+            display: none;
+          }
+        }
+      }
+    }
+  }
+}
+
+@media (max-width: 480px) {
+  .stock-screening {
+    .filter-panel {
+      .filter-form {
+        :deep(.el-form-item__label) {
+          width: 80px !important;
+          font-size: 13px;
+        }
+        
+        :deep(.el-form-item__content) {
+          margin-left: 80px !important;
+        }
+      }
+    }
+
+    .results-panel {
+      :deep(.el-table) {
+        // 隐藏部分不重要的列
+        .el-table__header th:nth-child(n+6),
+        .el-table__body td:nth-child(n+6) {
+          display: none;
+        }
+      }
+    }
+  }
+}
 </style>

@@ -1,0 +1,392 @@
+/**
+ * 移动端响应式全局样式
+ * Mobile Responsive Global Styles
+ */
+
+// ==================== 断点定义 ====================
+$mobile-sm: 480px;   // 小屏手机
+$mobile: 768px;       // 平板和大屏手机
+$tablet: 1024px;      // 平板横屏
+$desktop: 1440px;     // 桌面
+
+// ==================== Mixins ====================
+@mixin mobile-sm {
+  @media (max-width: $mobile-sm) {
+    @content;
+  }
+}
+
+@mixin mobile {
+  @media (max-width: $mobile) {
+    @content;
+  }
+}
+
+@mixin tablet {
+  @media (max-width: $tablet) {
+    @content;
+  }
+}
+
+@mixin mobile-landscape {
+  @media (max-width: $mobile) and (orientation: landscape) {
+    @content;
+  }
+}
+
+// ==================== 全局移动端样式 ====================
+
+// 移动端字体大小调整
+@include mobile {
+  :root {
+    font-size: 14px;
+  }
+  
+  body {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+@include mobile-sm {
+  :root {
+    font-size: 13px;
+  }
+}
+
+// ==================== Element Plus 移动端优化 ====================
+
+@include mobile {
+  // 按钮大小调整
+  .el-button {
+    &.el-button--default,
+    &.el-button--primary,
+    &.el-button--success,
+    &.el-button--warning,
+    &.el-button--danger {
+      padding: 10px 16px;
+      font-size: 14px;
+      min-height: 40px;
+    }
+    
+    &.el-button--small {
+      padding: 8px 12px;
+      min-height: 36px;
+    }
+  }
+
+  // 表格优化
+  .el-table {
+    font-size: 13px;
+    
+    .el-table__header th {
+      padding: 8px 0;
+      font-size: 12px;
+    }
+    
+    .el-table__body td {
+      padding: 10px 0;
+    }
+    
+    // 移动端表格滚动提示
+    &::after {
+      content: '← 左右滑动查看更多 →';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      text-align: center;
+      padding: 8px;
+      background: var(--el-fill-color-lighter);
+      color: var(--el-text-color-secondary);
+      font-size: 12px;
+      opacity: 0.8;
+      pointer-events: none;
+    }
+  }
+
+  // 表单优化
+  .el-form {
+    .el-form-item {
+      margin-bottom: 18px;
+      
+      &__label {
+        font-size: 14px;
+        padding-bottom: 6px;
+      }
+      
+      &__content {
+        font-size: 14px;
+      }
+    }
+    
+    .el-input__inner,
+    .el-textarea__inner {
+      font-size: 14px;
+      padding: 10px 12px;
+      min-height: 40px;
+    }
+    
+    .el-select {
+      width: 100%;
+    }
+  }
+
+  // 对话框优化
+  .el-dialog {
+    width: 90% !important;
+    max-width: 500px;
+    margin: 0 auto;
+    
+    &__header {
+      padding: 16px;
+    }
+    
+    &__body {
+      padding: 16px;
+      max-height: 60vh;
+      overflow-y: auto;
+    }
+    
+    &__footer {
+      padding: 12px 16px;
+      
+      .el-button {
+        width: 100%;
+        margin-left: 0 !important;
+        margin-bottom: 8px;
+        
+        &:last-child {
+          margin-bottom: 0;
+        }
+      }
+    }
+  }
+
+  // 抽屉优化
+  .el-drawer {
+    &.rtl {
+      width: 85% !important;
+    }
+    
+    &__body {
+      padding: 16px;
+    }
+  }
+
+  // 分页优化
+  .el-pagination {
+    padding: 8px 0;
+    
+    &.is-background .el-pager li {
+      min-width: 32px;
+      height: 32px;
+      line-height: 32px;
+      font-size: 13px;
+    }
+    
+    .el-pagination__total,
+    .el-pagination__sizes {
+      display: none;
+    }
+    
+    .el-pagination__jump {
+      margin-left: 8px;
+    }
+  }
+
+  // 卡片优化
+  .el-card {
+    margin-bottom: 12px;
+    
+    &__header {
+      padding: 12px 16px;
+      font-size: 15px;
+    }
+    
+    &__body {
+      padding: 16px;
+    }
+  }
+
+  // 标签优化
+  .el-tag {
+    padding: 4px 8px;
+    font-size: 12px;
+  }
+
+  // 下拉菜单优化
+  .el-dropdown-menu {
+    &__item {
+      padding: 10px 16px;
+      font-size: 14px;
+    }
+  }
+
+  // 消息提示优化
+  .el-message {
+    min-width: 280px;
+    max-width: 90%;
+    
+    &__content {
+      font-size: 14px;
+    }
+  }
+
+  // 通知优化
+  .el-notification {
+    width: 90%;
+    max-width: 380px;
+  }
+
+  // 菜单优化
+  .el-menu {
+    &-item,
+    &-submenu__title {
+      height: 48px;
+      line-height: 48px;
+      font-size: 14px;
+    }
+  }
+
+  // 步骤条优化
+  .el-steps {
+    &--horizontal {
+      .el-step {
+        &__title {
+          font-size: 13px;
+        }
+        
+        &__description {
+          font-size: 12px;
+        }
+      }
+    }
+  }
+
+  // 时间线优化
+  .el-timeline {
+    padding-left: 12px;
+    
+    &-item {
+      &__timestamp {
+        font-size: 12px;
+      }
+      
+      &__content {
+        font-size: 13px;
+      }
+    }
+  }
+}
+
+// ==================== 移动端工具类 ====================
+
+@include mobile {
+  // 隐藏/显示
+  .mobile-hidden {
+    display: none !important;
+  }
+  
+  .mobile-visible {
+    display: block !important;
+  }
+
+  // 间距调整
+  .mobile-p-0 { padding: 0 !important; }
+  .mobile-p-1 { padding: 8px !important; }
+  .mobile-p-2 { padding: 16px !important; }
+  .mobile-p-3 { padding: 24px !important; }
+  
+  .mobile-m-0 { margin: 0 !important; }
+  .mobile-m-1 { margin: 8px !important; }
+  .mobile-m-2 { margin: 16px !important; }
+  .mobile-m-3 { margin: 24px !important; }
+
+  // 宽度
+  .mobile-w-full { width: 100% !important; }
+  .mobile-w-auto { width: auto !important; }
+
+  // 文字大小
+  .mobile-text-xs { font-size: 12px !important; }
+  .mobile-text-sm { font-size: 13px !important; }
+  .mobile-text-base { font-size: 14px !important; }
+  .mobile-text-lg { font-size: 16px !important; }
+
+  // Flex布局
+  .mobile-flex-col {
+    flex-direction: column !important;
+  }
+  
+  .mobile-flex-wrap {
+    flex-wrap: wrap !important;
+  }
+
+  // Grid布局
+  .mobile-grid-1 {
+    grid-template-columns: repeat(1, 1fr) !important;
+  }
+  
+  .mobile-grid-2 {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+// ==================== 横屏优化 ====================
+@include mobile-landscape {
+  .el-dialog {
+    &__body {
+      max-height: 50vh;
+    }
+  }
+  
+  .main-content {
+    padding: 12px !important;
+  }
+}
+
+// ==================== 触摸优化 ====================
+@include mobile {
+  // 增大点击区域
+  a, button, .clickable {
+    min-height: 44px;
+    min-width: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  // 禁用hover效果（移动端无意义）
+  *:hover {
+    // 移动端不显示hover效果
+  }
+
+  // 优化滚动
+  .scrollable {
+    -webkit-overflow-scrolling: touch;
+    overflow-y: auto;
+  }
+
+  // 防止双击缩放
+  * {
+    touch-action: manipulation;
+  }
+}
+
+// ==================== 性能优化 ====================
+@include mobile {
+  // 禁用动画（可选，提升性能）
+  .performance-mode {
+    * {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+
+  // 简化阴影
+  .el-card,
+  .el-dialog,
+  .el-drawer {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+  }
+}

@@ -1,5 +1,15 @@
 <template>
   <div class="header-actions">
+    <!-- 布局切换 -->
+    <el-tooltip :content="layoutModeText" placement="bottom">
+      <el-button type="text" @click="toggleLayout" class="action-btn">
+        <el-icon>
+          <Monitor v-if="appStore.layoutMode === 'original'" />
+          <Iphone v-else />
+        </el-icon>
+      </el-button>
+    </el-tooltip>
+
     <!-- 主题切换 -->
     <el-tooltip content="切换主题" placement="bottom">
       <el-button type="text" @click="toggleTheme" class="action-btn">
@@ -61,12 +71,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { useNotificationStore } from '@/stores/notifications'
 import { useAuthStore } from '@/stores/auth'
 import { storeToRefs } from 'pinia'
 import {
+  Monitor,
+  Iphone,
   Sunny,
   Moon,
   FullScreen,
@@ -83,6 +95,11 @@ const filter = ref<'all' | 'unread'>('all')
 let timerCount: any = null
 let timerList: any = null
 
+const layoutModeText = computed(() => 
+  appStore.layoutMode === 'original' ? '切换到手机布局' : '切换到原始布局'
+)
+
+const toggleLayout = () => { appStore.toggleLayoutMode() }
 const toggleTheme = () => { appStore.toggleTheme() }
 const toggleFullscreen = () => {
   if (document.fullscreenElement) document.exitFullscreen()

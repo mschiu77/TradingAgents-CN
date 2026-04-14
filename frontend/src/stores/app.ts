@@ -17,6 +17,7 @@ export interface AppState {
   // 布局状态
   sidebarCollapsed: boolean
   sidebarWidth: number
+  layoutMode: 'original' | 'smartphone'
 
   // 当前路由信息
   currentRoute: RouteLocationNormalized | null
@@ -37,39 +38,59 @@ export interface AppState {
 }
 
 export const useAppStore = defineStore('app', {
-  state: (): AppState => ({
-    loading: false,
-    loadingProgress: 0,
-    theme: (useStorage('app-theme', 'auto').value || 'auto') as 'light' | 'dark' | 'auto',
-    language: (useStorage('app-language', 'zh-CN').value || 'zh-CN') as 'zh-CN' | 'en-US',
+  state: (): AppState => {
+    // Auto-detect device type for initial layout
+    const detectDeviceLayout = (): 'original' | 'smartphone' => {
+      const userAgent = navigator.userAgent.toLowerCase()
+      const isMobile = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent)
+      const isTablet = /ipad|android(?!.*mobile)/i.test(userAgent)
+      const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0
+      const smallScreen = window.innerWidth < 768
+      
+      // Use smartphone layout if it's a mobile device or small screen with touch
+      if (isMobile && !isTablet) return 'smartphone'
+      if (smallScreen && hasTouch) return 'smartphone'
+      return 'original'
+    }
 
-    isOnline: navigator.onLine,
-    apiConnected: false,
-    lastApiCheck: 0,
+    const storedLayout = useStorage('layout-mode', null).value
+    const defaultLayout = storedLayout || detectDeviceLayout()
 
-    sidebarCollapsed: useStorage('sidebar-collapsed', false).value || false,
-    sidebarWidth: useStorage('sidebar-width', 240).value || 240,
+    return {
+      loading: false,
+      loadingProgress: 0,
+      theme: (useStorage('app-theme', 'auto').value || 'auto') as 'light' | 'dark' | 'auto',
+      language: (useStorage('app-language', 'zh-CN').value || 'zh-CN') as 'zh-CN' | 'en-US',
 
-    currentRoute: null,
+      isOnline: navigator.onLine,
+      apiConnected: false,
+      lastApiCheck: 0,
 
-    preferences: useStorage('user-preferences', {
-      defaultMarket: 'A股',
-      defaultDepth: '3',  // 3级为标准分析（推荐）
-      autoRefresh: true,
-      refreshInterval: 30,
-      showWelcome: true
-    }).value || {
-      defaultMarket: 'A股',
-      defaultDepth: '3',  // 3级为标准分析（推荐）
-      autoRefresh: true,
-      refreshInterval: 30,
-      showWelcome: true
-    },
+      sidebarCollapsed: useStorage('sidebar-collapsed', false).value || false,
+      sidebarWidth: useStorage('sidebar-width', 240).value || 240,
+      layoutMode: defaultLayout as 'original' | 'smartphone',
 
-    version: '0.1.16',
-    buildTime: new Date().toISOString(),
-    apiVersion: ''
-  }),
+      currentRoute: null,
+
+      preferences: useStorage('user-preferences', {
+        defaultMarket: 'A股',
+        defaultDepth: '3',  // 3级为标准分析（推荐）
+        autoRefresh: true,
+        refreshInterval: 30,
+        showWelcome: true
+      }).value || {
+        defaultMarket: 'A股',
+        defaultDepth: '3',  // 3级为标准分析（推荐）
+        autoRefresh: true,
+        refreshInterval: 30,
+        showWelcome: true
+      },
+
+      version: '0.1.16',
+      buildTime: new Date().toISOString(),
+      apiVersion: ''
+    }
+  },
 
   getters: {
     // 是否为暗色主题
@@ -167,6 +188,18 @@ export const useAppStore = defineStore('app', {
       this.sidebarWidth = Math.max(200, Math.min(400, width))
       // 同步到 localStorage
       localStorage.setItem('sidebar-width', String(this.sidebarWidth))
+    },
+
+    // 切换布局模式
+    toggleLayoutMode() {
+      this.layoutMode = this.layoutMode === 'original' ? 'smartphone' : 'original'
+      localStorage.setItem('layout-mode', this.layoutMode)
+    },
+
+    // 设置布局模式
+    setLayoutMode(mode: 'original' | 'smartphone') {
+      this.layoutMode = mode
+      localStorage.setItem('layout-mode', mode)
     },
     
     // 设置当前路由

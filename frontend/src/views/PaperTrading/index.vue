@@ -622,4 +622,88 @@ onMounted(() => {
 .header { display:flex; align-items:center; justify-content:space-between; margin-bottom: 12px; }
 .title { display:flex; align-items:center; font-weight: 600; font-size: 16px; }
 .card-hd { font-weight: 600; }
+
+/* 移动端响应式 */
+@media (max-width: 768px) {
+  .paper-trading {
+    padding: 12px;
+  }
+  
+  .header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    
+    .title {
+      font-size: 18px;
+    }
+  }
+  
+  /* 市场标签切换 - 垂直布局 */
+  :deep(.el-tabs__nav) {
+    display: flex;
+    flex-wrap: wrap;
+  }
+  
+  /* 卡片网格 - 单列 */
+  :deep(.el-row) {
+    .el-col {
+      max-width: 100% !important;
+      flex: 0 0 100% !important;
+      margin-bottom: 12px;
+    }
+  }
+  
+  /* 表格优化 */
+  :deep(.el-table) {
+    font-size: 12px;
+    
+    .el-table__header th {
+      padding: 8px 4px;
+      font-size: 11px;
+    }
+    
+    .el-table__body td {
+      padding: 10px 4px;
+      font-size: 12px;
+    }
+    
+    /* 操作按钮 */
+    .el-button--small {
+      padding: 5px 8px;
+      font-size: 11px;
+    }
+  }
+  
+  /* 统计卡片 */
+  :deep(.el-statistic) {
+    .el-statistic__head {
+      font-size: 13px;
+    }
+    
+    .el-statistic__content {
+      font-size: 20px;
+    }
+  }
+}
+
+@media (max-width: 480px) {
+  .paper-trading {
+    padding: 8px;
+  }
+  
+  .header {
+    .title {
+      font-size: 16px;
+    }
+  }
+  
+  /* 隐藏部分表格列 */
+  :deep(.el-table) {
+    .el-table__header th:nth-child(n+5),
+    .el-table__body td:nth-child(n+5) {
+      display: none;
+    }
+  }
+}
 </style>

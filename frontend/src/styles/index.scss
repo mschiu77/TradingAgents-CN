@@ -1,5 +1,8 @@
 // 全局样式文件
 
+// 导入移动端响应式样式
+@import './mobile.scss';
+
 // 重置样式
 * {
   box-sizing: border-box;

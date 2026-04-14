@@ -570,4 +570,134 @@ onMounted(() => {
 .strategy-code code {
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
 }
+
+/* 移动端响应式 */
+@media (max-width: 768px) {
+  .strategy-research {
+    padding: 12px;
+  }
+  
+  .page-header {
+    .page-title {
+      font-size: 18px;
+    }
+    
+    .page-description {
+      font-size: 13px;
+    }
+  }
+  
+  /* 策略列表和详情 */
+  .content-wrapper {
+    :deep(.el-row) {
+      .el-col {
+        max-width: 100% !important;
+        flex: 0 0 100% !important;
+      }
+    }
+  }
+  
+  /* 策略项 */
+  .strategy-item {
+    padding: 12px;
+    
+    .strategy-header {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 8px;
+      
+      h4 {
+        font-size: 15px;
+      }
+    }
+    
+    .strategy-description {
+      font-size: 13px;
+    }
+    
+    .strategy-meta {
+      flex-wrap: wrap;
+      gap: 10px;
+      font-size: 11px;
+    }
+  }
+  
+  /* 回测表单 */
+  :deep(.el-form) {
+    .el-form-item__label {
+      width: 100px !important;
+      font-size: 13px;
+    }
+    
+    .el-form-item__content {
+      margin-left: 100px !important;
+    }
+    
+    .el-date-picker {
+      width: 100%;
+    }
+  }
+  
+  /* 代码显示 */
+  .strategy-code {
+    padding: 10px;
+    font-size: 11px;
+    max-height: 300px;
+    overflow: auto;
+  }
+  
+  /* 结果图表 */
+  :deep(.result-stats) {
+    .stat-item {
+      padding: 10px;
+      
+      .stat-value {
+        font-size: 20px;
+      }
+      
+      .stat-label {
+        font-size: 12px;
+      }
+    }
+  }
+}
+
+@media (max-width: 480px) {
+  .strategy-research {
+    padding: 8px;
+  }
+  
+  .page-header {
+    margin-bottom: 12px;
+    
+    .page-title {
+      font-size: 16px;
+    }
+  }
+  
+  .strategy-item {
+    padding: 10px;
+    
+    .strategy-header h4 {
+      font-size: 14px;
+    }
+    
+    .strategy-description {
+      font-size: 12px;
+    }
+  }
+  
+  :deep(.el-form-item__label) {
+    width: 80px !important;
+    font-size: 12px;
+  }
+  
+  :deep(.el-form-item__content) {
+    margin-left: 80px !important;
+  }
+  
+  .strategy-code {
+    font-size: 10px;
+  }
+}
 </style>
